@@ -1,0 +1,19 @@
+DROP TABLE IF EXISTS level_update_002 ;
+CREATE TABLE IF NOT EXISTS level_update_002(
+	user_id string 
+	, id_card_name string  
+	, mobile STRING 
+	, level string
+)
+COMMENT 'level_update_002'
+;
+
+INSERT OVERWRITE TABLE level_update_002 
+SELECT * FROM
+(SELECT a.*
+FROM
+(SELECT DISTINCT(user_id), id_card_name, mobile, level FROM `yesterday_level_002` WHERE id_card_name!=' ')a
+LEFT OUTER JOIN
+(SELECT DISTINCT(user_id), id_card_name, mobile, level FROM `the_day_before_yesterday_002` WHERE id_card_name!=' ')b ON a.user_id=b.user_id
+WHERE a.level!=b.level
+or b.level is null)t
