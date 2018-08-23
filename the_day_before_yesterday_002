@@ -1,0 +1,107 @@
+DROP TABLE IF EXISTS the_day_before_yesterday_002  ;
+CREATE TABLE IF NOT EXISTS the_day_before_yesterday_002(
+	user_id string 
+	, id_card_name string  
+	, mobile STRING 
+	, level string
+)
+COMMENT 'the_day_before_yesterday_002'
+;
+
+INSERT OVERWRITE TABLE the_day_before_yesterday_002
+SELECT DISTINCT * FROM
+(SELECT a0.id as user_id , a0.id_card_name, a0.mobile,
+        CASE WHEN c.user_id IS NULL 
+            THEN 'R'
+
+            WHEN c.user_id IS NOT  NULL 
+            AND a.user_id IS NULL 
+            THEN 'G'
+
+            WHEN  c.user_id IS NOT  NULL  AND a.user_id IS NOT  NULL 
+            AND d.user_id IS NULL 
+            THEN 'N'
+
+            WHEN c.user_id IS NOT NULL  AND a.user_id IS NOT NULL  AND d.user_id IS NOT  NULL AND b.manager_user_id IS NULL 
+            THEN 'P'
+            
+            WHEN  c.user_id IS NOT NULL  AND a.user_id IS NOT NULL  AND d.user_id IS NOT  NULL AND b.manager_user_id IS NOT  NULL 
+                 AND e.num>20
+            THEN 'S'
+
+            WHEN c.user_id IS NOT NULL  AND a.user_id IS NOT NULL  AND d.user_id IS NOT  NULL AND b.manager_user_id IS NOT  NULL 
+                 AND e.num>10 AND e.num<=20
+            THEN 'A'
+
+            WHEN c.user_id IS NOT NULL  AND a.user_id IS NOT NULL  AND d.user_id IS NOT  NULL AND b.manager_user_id IS NOT  NULL 
+                 AND e.num>0 AND e.num<=10
+            THEN 'B'
+
+            WHEN c.user_id IS NOT NULL  AND a.user_id IS NOT NULL  AND d.user_id IS NOT  NULL AND b.manager_user_id IS NOT  NULL
+            AND  datediff(dateadd(to_date('${bdp.system.bizdate}', 'yyyymmdd'), -1, 'dd'), c.create_time, 'dd')>30 
+            THEN 'D'
+            
+
+            WHEN c.user_id IS NOT NULL  AND a.user_id IS NOT NULL  AND d.user_id IS NOT  NULL AND b.manager_user_id IS NOT  NULL
+            AND  datediff(dateadd(to_date('${bdp.system.bizdate}', 'yyyymmdd'), -1, 'dd'), c.create_time, 'dd')<=30 
+            AND e.num IS NULL 
+            THEN 'C'
+
+            END as level
+
+FROM
+(SELECT id,id_card_name,mobile FROM f_user WHERE credit_manager_status!=0 AND  datediff(dateadd(to_date('${bdp.system.bizdate}', 'yyyymmdd'), -1, 'dd'), create_time, 'dd')>=0 ) as a0 
+LEFT OUTER JOIN 
+(SELECT user_id FROM `f_loan_manager_apply_record` WHERE op_status=2 AND  datediff(dateadd(to_date('${bdp.system.bizdate}', 'yyyymmdd'), -1, 'dd'), create_time, 'dd')>=0 )a ON a0.id=a.user_id   
+
+LEFT OUTER JOIN
+(SELECT manager_user_id FROM `f_loan_order_collect_log` WHERE datediff(dateadd(to_date('${bdp.system.bizdate}', 'yyyymmdd'), -1, 'dd'), create_time, 'dd')>=0) b ON a0.id=b.manager_user_id
+
+LEFT OUTER JOIN
+(SELECT xx.user_id,xx.create_time
+FROM 
+(SELECT x.user_id,x.create_time,ROW_NUMBER() OVER(PARTITION BY x.user_id ORDER BY x.create_time DESC) AS ranks 
+FROM 
+(SELECT aa.user_id, aa.create_time,'订单' as type 
+FROM (
+	SELECT user_id, create_time, ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY create_time DESC) AS ranks
+	FROM `f_loan_order_scan_record`
+	WHERE datediff(dateadd(TO_DATE('${bdp.system.bizdate}', 'yyyymmdd'), -1, 'dd'), create_time, 'dd') >= 0
+) aa
+WHERE aa.ranks = 1
+UNION ALL
+SELECT CAST(bb.user_id AS BIGINT) AS user_id, bb.create_time,'海报' as type 
+FROM (
+	SELECT a1.id AS user_id, a0.create_time, ROW_NUMBER() OVER (PARTITION BY a1.id ORDER BY a0.create_time DESC) AS ranks
+	FROM `ods_sensors_web_click_data` a0
+	INNER JOIN f_user a1
+	ON a0.distinct_id = a1.open_id
+	WHERE datediff(dateadd(TO_DATE('${bdp.system.bizdate}', 'yyyymmdd'), -1, 'dd'), a0.create_time, 'dd') >= 0
+) bb
+WHERE bb.ranks = 1
+UNION ALL
+SELECT CAST(cc.user_id AS BIGINT) AS user_id, cc.create_time, 'icon' as type
+FROM (
+	SELECT a1.id AS user_id, a0.create_time, ROW_NUMBER() OVER (PARTITION BY a1.id ORDER BY a0.create_time DESC) AS ranks
+	FROM `ods_sensors_xdj_home_plate_click_data` a0
+	INNER JOIN f_user a1
+	ON a0.distinct_id = a1.open_id
+	WHERE datediff(dateadd(TO_DATE('${bdp.system.bizdate}', 'yyyymmdd'), -1, 'dd'), a0.create_time, 'dd') >= 0
+) cc
+WHERE cc.ranks = 1)  as x 
+) as xx 
+WHERE xx.ranks=1) c ON a0.id=c.user_id
+
+
+
+LEFT OUTER JOIN
+(SELECT distinct user_id FROM `f_pay_order` WHERE tx_status=2 AND goods_type=4 AND  datediff(dateadd(to_date('${bdp.system.bizdate}', 'yyyymmdd'), -1, 'dd'), create_time, 'dd')>=0 ) d ON a0.id=d.user_id
+LEFT OUTER JOIN 
+(SELECT manager_user_id,COUNT(DISTINCT order_id) as num 
+FROM f_loan_order_collect_log 
+WHERE datediff(dateadd(to_date('${bdp.system.bizdate}', 'yyyymmdd'), -1, 'dd'), create_time, 'dd')>=0 
+      AND datediff(dateadd(to_date('${bdp.system.bizdate}', 'yyyymmdd'), -1, 'dd'), create_time, 'dd')<=30
+    GROUP BY manager_user_id ) as e 
+ON a0.id=e.manager_user_id
+)x 
+WHERE x.level is not NULL  ;
