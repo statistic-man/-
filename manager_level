@@ -1,0 +1,17 @@
+CREATE TABLE IF NOT EXISTS manager_level_002(
+	user_id string 
+	, id_card_name string  
+	, mobile STRING 
+	, level string
+    ,start_time string 
+    ,end_time string
+)
+COMMENT 'manager_level_002'
+;
+
+INSERT OVERWRITE TABLE manager_level_002 
+SELECT *
+FROM (
+SELECT DISTINCT(user_id),id_card_name,mobile,level,'2018-08-15' as  start_time,'9999-12-31' as end_time
+FROM the_day_before_yesterday_002
+WHERE id_card_name!=' ')t
